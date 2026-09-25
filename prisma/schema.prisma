@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[]
+
+  @@map("users")
+}
+
+model Project {
+  id             String      @id @default(cuid())
+  ownerId        String
+  title          String
+  description    String?
+  coverImageUrl  String?
+  accentColor    String      @default("#00ffd5")
+  slug           String      @unique
+  isDownloadable Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  owner          User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tracks         Track[]
+  shareLinks     ShareLink[]
+
+  @@map("projects")
+}
+
+model Track {
+  id           String      @id @default(cuid())
+  projectId    String?
+  title        String
+  artist       String?
+  audioUrl     String
+  storageKey   String?
+  format       String      // "wav" | "mp3"
+  duration     Float       @default(0) // seconds
+  sizeBytes    Float       @default(0) // bytes
+  bpm          Int?
+  waveformData String?     @db.Text // JSON array of normalized peaks [0.1, 0.4, 0.8...]
+  orderIndex   Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  project      Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shareLinks   ShareLink[]
+
+  @@map("tracks")
+}
+
+model ShareLink {
+  id             String    @id @default(cuid())
+  token          String    @unique
+  projectId      String?
+  trackId        String?
+  passwordHash   String?
+  expiresAt      DateTime?
+  viewCount      Int       @default(0)
+  listenCount    Int       @default(0)
+  allowDownload  Boolean   @default(true)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  track          Track?    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@map("share_links")
+}

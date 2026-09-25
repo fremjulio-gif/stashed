@@ -1,0 +1,206 @@
+import { put, del } from "@vercel/blob";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import fs from "fs";
+import path from "path";
+
+// Storage Provider Types
+export type StorageProvider = "r2" | "vercel-blob" | "local";
+
+export function getActiveStorageProvider(): StorageProvider {
+  if (
+    process.env.R2_ACCOUNT_ID &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_NAME
+  ) {
+    return "r2";
+  }
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    return "vercel-blob";
+  }
+  return "local";
+}
+
+// S3 / Cloudflare R2 Client initialization
+let r2Client: S3Client | null = null;
+function getR2Client(): S3Client {
+  if (!r2Client) {
+    const accountId = process.env.R2_ACCOUNT_ID || "";
+    r2Client = new S3Client({
+      region: "auto",
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+      },
+    });
+  }
+  return r2Client;
+}
+
+export interface UploadResult {
+  url: string;
+  key: string;
+  provider: StorageProvider;
+  size: number;
+}
+
+/**
+ * Upload a file directly from server buffer
+ */
+export async function uploadFileBuffer(
+  buffer: Buffer,
+  filename: string,
+  contentType: string,
+  folder: "audio" | "covers" = "audio"
+): Promise<UploadResult> {
+  const provider = getActiveStorageProvider();
+  const safeFilename = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+  const key = `${folder}/${safeFilename}`;
+
+  // 1. Cloudflare R2
+  if (provider === "r2") {
+    const client = getR2Client();
+    const bucket = process.env.R2_BUCKET_NAME!;
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
+
+    const publicDomain =
+      process.env.R2_PUBLIC_DOMAIN ||
+      `https://${bucket}.${process.env.R2_ACCOUNT_ID}.r2.dev`;
+    const cleanDomain = publicDomain.replace(/\/+$/, "");
+    return {
+      url: `${cleanDomain}/${key}`,
+      key,
+      provider: "r2",
+      size: buffer.length,
+    };
+  }
+
+  // 2. Vercel Blob
+  if (provider === "vercel-blob") {
+    const blob = await put(key, buffer, {
+      access: "public",
+      contentType,
+    });
+    return {
+      url: blob.url,
+      key: blob.pathname,
+      provider: "vercel-blob",
+      size: buffer.length,
+    };
+  }
+
+  // 3. Local fallback (for local development without cloud keys)
+  const localUploadDir = path.join(process.cwd(), "public", "uploads", folder);
+  if (!fs.existsSync(localUploadDir)) {
+    fs.mkdirSync(localUploadDir, { recursive: true });
+  }
+
+  const filePath = path.join(localUploadDir, safeFilename);
+  fs.writeFileSync(filePath, buffer);
+
+  return {
+    url: `/uploads/${folder}/${safeFilename}`,
+    key,
+    provider: "local",
+    size: buffer.length,
+  };
+}
+
+/**
+ * Generate a pre-signed URL for direct browser-to-cloud upload.
+ * Highly recommended for heavy 24-bit .wav files (up to 200MB+) to bypass serverless limits.
+ */
+export async function getDirectUploadUrl(
+  filename: string,
+  contentType: string,
+  folder: "audio" | "covers" = "audio"
+): Promise<{
+  uploadUrl: string;
+  finalPublicUrl: string;
+  key: string;
+  provider: StorageProvider;
+}> {
+  const provider = getActiveStorageProvider();
+  const safeFilename = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+  const key = `${folder}/${safeFilename}`;
+
+  if (provider === "r2") {
+    const client = getR2Client();
+    const bucket = process.env.R2_BUCKET_NAME!;
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType,
+    });
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
+    const publicDomain =
+      process.env.R2_PUBLIC_DOMAIN ||
+      `https://${bucket}.${process.env.R2_ACCOUNT_ID}.r2.dev`;
+    const cleanDomain = publicDomain.replace(/\/+$/, "");
+
+    return {
+      uploadUrl,
+      finalPublicUrl: `${cleanDomain}/${key}`,
+      key,
+      provider: "r2",
+    };
+  }
+
+  // For Vercel Blob and Local, uploads go through standard upload endpoint
+  return {
+    uploadUrl: "/api/upload",
+    finalPublicUrl: "",
+    key,
+    provider,
+  };
+}
+
+/**
+ * Delete a file cleanly from storage
+ */
+export async function deleteStoredFile(
+  keyOrUrl: string,
+  provider?: StorageProvider
+): Promise<void> {
+  const activeProvider = provider || getActiveStorageProvider();
+
+  try {
+    if (activeProvider === "r2") {
+      const client = getR2Client();
+      const bucket = process.env.R2_BUCKET_NAME!;
+      const key = keyOrUrl.startsWith("http")
+        ? new URL(keyOrUrl).pathname.replace(/^\/+/, "")
+        : keyOrUrl;
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+      return;
+    }
+
+    if (activeProvider === "vercel-blob") {
+      await del(keyOrUrl);
+      return;
+    }
+
+    if (activeProvider === "local") {
+      const cleanPath = keyOrUrl.replace(/^\/uploads\//, "");
+      const fullPath = path.join(process.cwd(), "public", "uploads", cleanPath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+    }
+  } catch (err) {
+    console.error("Error deleting file:", err);
+  }
+}
