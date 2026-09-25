@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { getTrackById, updateTrack, deleteTrack } from "@/lib/db";
+import { getSession, canEditResource } from "@/lib/auth";
+import { getTrackById, updateTrack, deleteTrack, getProjectById } from "@/lib/db";
 import { deleteStoredFile } from "@/lib/storage";
 
 export async function PATCH(
@@ -9,13 +9,37 @@ export async function PATCH(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!session || !session.pseudo) {
+      return NextResponse.json(
+        { error: "Veuillez choisir un pseudo pour modifier cette piste." },
+        { status: 401 }
+      );
     }
 
     const { id } = await params;
-    const body = await req.json();
+    const track = await getTrackById(id);
+    if (!track) {
+      return NextResponse.json(
+        { error: "Piste introuvable" },
+        { status: 404 }
+      );
+    }
 
+    const project = track.projectId ? await getProjectById(track.projectId) : null;
+    const isAllowed =
+      canEditResource(track.creatorId, track.creatorName, session) ||
+      (project && canEditResource(project.creatorId, project.creatorName, session));
+
+    if (!isAllowed) {
+      return NextResponse.json(
+        {
+          error: `Cette piste a été ajoutée par "${track.creatorName}". Vous ne pouvez modifier que vos propres pistes.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
     const updated = await updateTrack(id, body);
     if (!updated) {
       return NextResponse.json(
@@ -40,8 +64,11 @@ export async function DELETE(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!session || !session.pseudo) {
+      return NextResponse.json(
+        { error: "Veuillez choisir un pseudo pour supprimer cette piste." },
+        { status: 401 }
+      );
     }
 
     const { id } = await params;
@@ -50,6 +77,20 @@ export async function DELETE(
       return NextResponse.json(
         { error: "Piste introuvable" },
         { status: 404 }
+      );
+    }
+
+    const project = track.projectId ? await getProjectById(track.projectId) : null;
+    const isAllowed =
+      canEditResource(track.creatorId, track.creatorName, session) ||
+      (project && canEditResource(project.creatorId, project.creatorName, session));
+
+    if (!isAllowed) {
+      return NextResponse.json(
+        {
+          error: `Cette piste a été ajoutée par "${track.creatorName}". Vous ne pouvez supprimer que vos propres pistes.`,
+        },
+        { status: 403 }
       );
     }
 

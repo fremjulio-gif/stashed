@@ -4,11 +4,7 @@ import { getProjects, createProject } from "@/lib/db";
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
-
+    // Collaborative space: all visitors can explore the library
     const projects = await getProjects();
     return NextResponse.json(projects);
   } catch (error) {
@@ -23,8 +19,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!session || !session.pseudo) {
+      return NextResponse.json(
+        { error: "Veuillez choisir un pseudo pour créer un projet." },
+        { status: 401 }
+      );
     }
 
     const body = await req.json();
@@ -44,6 +43,8 @@ export async function POST(req: NextRequest) {
       coverImageUrl: coverImageUrl || null,
       accentColor: accentColor || "#00ffd5",
       isDownloadable: isDownloadable ?? true,
+      creatorName: session.pseudo,
+      creatorId: session.visitorId,
     });
 
     return NextResponse.json(project, { status: 201 });

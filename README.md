@@ -1,7 +1,7 @@
 # STASHED 🎛️✨
 
-> **Bibliothèque audio studio & plateforme de partage haute résolution pour ingénieurs du son et producteurs.**  
-> Inspiré par l'expérience fluide de *Untitled.stream* et *Samply*, combiné à une direction artistique **"Apple Liquid Glass x DAW Pro"**.
+> **Serveur et drive audio collaboratif et ouvert pour musiciens, ingénieurs du son et producteurs.**  
+> Partage haute résolution, organisation en projets et écoute fluide avec direction artistique **"Apple Liquid Glass x DAW Pro"**.
 
 ---
 

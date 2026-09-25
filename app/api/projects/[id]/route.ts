@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, canEditResource } from "@/lib/auth";
 import { getProjectById, updateProject, deleteProject, getTracks } from "@/lib/db";
 import { deleteStoredFile } from "@/lib/storage";
 
@@ -8,11 +8,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
-
     const { id } = await params;
     const project = await getProjectById(id);
     if (!project) {
@@ -38,13 +33,33 @@ export async function PATCH(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!session || !session.pseudo) {
+      return NextResponse.json(
+        { error: "Veuillez choisir un pseudo pour modifier ce projet." },
+        { status: 401 }
+      );
     }
 
     const { id } = await params;
-    const body = await req.json();
+    const project = await getProjectById(id);
+    if (!project) {
+      return NextResponse.json(
+        { error: "Projet introuvable" },
+        { status: 404 }
+      );
+    }
 
+    // Permission check
+    if (!canEditResource(project.creatorId, project.creatorName, session)) {
+      return NextResponse.json(
+        {
+          error: `Ce projet appartient à "${project.creatorName}". Vous ne pouvez modifier que vos propres créations.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
     const updated = await updateProject(id, body);
     if (!updated) {
       return NextResponse.json(
@@ -69,8 +84,11 @@ export async function DELETE(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!session || !session.pseudo) {
+      return NextResponse.json(
+        { error: "Veuillez choisir un pseudo pour supprimer ce projet." },
+        { status: 401 }
+      );
     }
 
     const { id } = await params;
@@ -79,6 +97,16 @@ export async function DELETE(
       return NextResponse.json(
         { error: "Projet introuvable" },
         { status: 404 }
+      );
+    }
+
+    // Permission check
+    if (!canEditResource(project.creatorId, project.creatorName, session)) {
+      return NextResponse.json(
+        {
+          error: `Ce projet appartient à "${project.creatorName}". Vous ne pouvez supprimer que vos propres créations.`,
+        },
+        { status: 403 }
       );
     }
 

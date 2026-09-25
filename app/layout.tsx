@@ -3,9 +3,9 @@ import "./globals.css";
 import { GlobalAudioPlayer } from "@/components/audio/GlobalAudioPlayer";
 
 export const metadata: Metadata = {
-  title: "Stashed • Bibliothèque Audio Studio",
+  title: "Stashed • Drive Audio Collaboratif",
   description:
-    "Bibliothèque audio personnelle pour ingénieurs du son et producteurs. Déposez, organisez et partagez vos mixes et masters en streaming haute résolution.",
+    "Serveur et drive audio collaboratif pour musiciens et producteurs. Déposez, organisez et partagez vos mixes et masters en streaming haute résolution.",
   icons: {
     icon: "/favicon.ico",
   },

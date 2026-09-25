@@ -27,7 +27,7 @@ export function MetadataModal({
   useEffect(() => {
     if (track) {
       setTitle(track.title);
-      setArtist(track.artist || "jlowav");
+      setArtist(track.artist || track.creatorName || "");
       setBpm(track.bpm ? track.bpm.toString() : "");
     }
     setError(null);
@@ -104,7 +104,7 @@ export function MetadataModal({
             type="text"
             value={artist}
             onChange={(e) => setArtist(e.target.value)}
-            placeholder="jlowav"
+            placeholder="Nom de l'artiste ou projet"
             className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2 text-sm text-white placeholder-neutral-500 outline-none focus:border-white/30"
           />
         </div>

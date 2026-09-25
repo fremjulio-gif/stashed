@@ -1,7 +1,9 @@
 import { prisma } from "./prisma";
 import fs from "fs";
 import path from "path";
-import { OWNER_EMAIL, OWNER_NAME } from "./auth";
+
+const DEFAULT_STUDIO_EMAIL = "studio@stashed.app";
+const DEFAULT_STUDIO_NAME = "Stashed Studio";
 
 export interface DBUser {
   id: string;
@@ -13,7 +15,9 @@ export interface DBUser {
 
 export interface DBProject {
   id: string;
-  ownerId: string;
+  ownerId: string | null;
+  creatorName: string;
+  creatorId: string | null;
   title: string;
   description: string | null;
   coverImageUrl: string | null;
@@ -28,6 +32,8 @@ export interface DBProject {
 export interface DBTrack {
   id: string;
   projectId: string | null;
+  creatorName: string;
+  creatorId: string | null;
   title: string;
   artist: string | null;
   audioUrl: string;
@@ -74,9 +80,9 @@ function getInitialFallbackData(): FallbackSchema {
   return {
     users: [
       {
-        id: "owner-jlowav-1",
-        email: OWNER_EMAIL,
-        name: OWNER_NAME,
+        id: "owner-studio-1",
+        email: DEFAULT_STUDIO_EMAIL,
+        name: DEFAULT_STUDIO_NAME,
         passwordHash: "",
         createdAt: new Date().toISOString(),
       },
@@ -84,7 +90,9 @@ function getInitialFallbackData(): FallbackSchema {
     projects: [
       {
         id: "proj_demo_1",
-        ownerId: "owner-jlowav-1",
+        ownerId: "owner-studio-1",
+        creatorName: "Stashed Studio",
+        creatorId: "owner-studio-1",
         title: "Liquid Glass EP (Mastered)",
         description:
           "Mixage & Sound Design final en 24-bit 48kHz. Conçu pour écoute au casque ou système studio.",
@@ -101,8 +109,10 @@ function getInitialFallbackData(): FallbackSchema {
       {
         id: "track_demo_1",
         projectId: "proj_demo_1",
+        creatorName: "Stashed Studio",
+        creatorId: "owner-studio-1",
         title: "01. Subsurface Resonance",
-        artist: "jlowav",
+        artist: "Stashed Studio",
         audioUrl: "https://actions.google.com/sounds/v1/science_fiction/deep_drone.ogg",
         storageKey: null,
         format: "wav",
@@ -121,8 +131,10 @@ function getInitialFallbackData(): FallbackSchema {
       {
         id: "track_demo_2",
         projectId: "proj_demo_1",
+        creatorName: "Stashed Studio",
+        creatorId: "owner-studio-1",
         title: "02. Glassmorphism Dawn (Final Master)",
-        artist: "jlowav",
+        artist: "Stashed Studio",
         audioUrl: "https://actions.google.com/sounds/v1/science_fiction/alien_hum.ogg",
         storageKey: null,
         format: "wav",
@@ -141,8 +153,10 @@ function getInitialFallbackData(): FallbackSchema {
       {
         id: "track_demo_3",
         projectId: "proj_demo_1",
+        creatorName: "Stashed Studio",
+        creatorId: "owner-studio-1",
         title: "03. DAW Transient Study",
-        artist: "jlowav",
+        artist: "Stashed Studio",
         audioUrl: "https://actions.google.com/sounds/v1/science_fiction/scifi_engine.ogg",
         storageKey: null,
         format: "mp3",
@@ -215,13 +229,13 @@ export async function getOwnerUser(): Promise<DBUser> {
   if (shouldUsePrisma()) {
     try {
       let user = await prisma.user.findUnique({
-        where: { email: OWNER_EMAIL },
+        where: { email: DEFAULT_STUDIO_EMAIL },
       });
       if (!user) {
         user = await prisma.user.create({
           data: {
-            email: OWNER_EMAIL,
-            name: OWNER_NAME,
+            email: DEFAULT_STUDIO_EMAIL,
+            name: DEFAULT_STUDIO_NAME,
             passwordHash: "",
           },
         });
@@ -258,6 +272,8 @@ export async function getProjects(): Promise<DBProject[]> {
       return projects.map((p) => ({
         id: p.id,
         ownerId: p.ownerId,
+        creatorName: p.creatorName || "Anonyme",
+        creatorId: p.creatorId || null,
         title: p.title,
         description: p.description,
         coverImageUrl: p.coverImageUrl,
@@ -269,6 +285,8 @@ export async function getProjects(): Promise<DBProject[]> {
         tracks: p.tracks.map((t) => ({
           id: t.id,
           projectId: t.projectId,
+          creatorName: t.creatorName || "Anonyme",
+          creatorId: t.creatorId || null,
           title: t.title,
           artist: t.artist,
           audioUrl: t.audioUrl,
@@ -292,8 +310,18 @@ export async function getProjects(): Promise<DBProject[]> {
   return db.projects.map((proj) => {
     const tracks = db.tracks
       .filter((t) => t.projectId === proj.id)
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-    return { ...proj, tracks };
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .map((t) => ({
+        ...t,
+        creatorName: t.creatorName || "Anonyme",
+        creatorId: t.creatorId || null,
+      }));
+    return {
+      ...proj,
+      creatorName: proj.creatorName || "Anonyme",
+      creatorId: proj.creatorId || null,
+      tracks,
+    };
   });
 }
 
@@ -312,6 +340,8 @@ export async function getProjectBySlug(slug: string): Promise<DBProject | null> 
         return {
           id: p.id,
           ownerId: p.ownerId,
+          creatorName: p.creatorName || "Anonyme",
+          creatorId: p.creatorId || null,
           title: p.title,
           description: p.description,
           coverImageUrl: p.coverImageUrl,
@@ -323,6 +353,8 @@ export async function getProjectBySlug(slug: string): Promise<DBProject | null> 
           tracks: p.tracks.map((t) => ({
             id: t.id,
             projectId: t.projectId,
+            creatorName: t.creatorName || "Anonyme",
+            creatorId: t.creatorId || null,
             title: t.title,
             artist: t.artist,
             audioUrl: t.audioUrl,
@@ -348,8 +380,18 @@ export async function getProjectBySlug(slug: string): Promise<DBProject | null> 
   if (!proj) return null;
   const tracks = db.tracks
     .filter((t) => t.projectId === proj.id)
-    .sort((a, b) => a.orderIndex - b.orderIndex);
-  return { ...proj, tracks };
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((t) => ({
+      ...t,
+      creatorName: t.creatorName || "Anonyme",
+      creatorId: t.creatorId || null,
+    }));
+  return {
+    ...proj,
+    creatorName: proj.creatorName || "Anonyme",
+    creatorId: proj.creatorId || null,
+    tracks,
+  };
 }
 
 export async function getProjectById(id: string): Promise<DBProject | null> {
@@ -367,6 +409,8 @@ export async function getProjectById(id: string): Promise<DBProject | null> {
         return {
           id: p.id,
           ownerId: p.ownerId,
+          creatorName: p.creatorName || "Anonyme",
+          creatorId: p.creatorId || null,
           title: p.title,
           description: p.description,
           coverImageUrl: p.coverImageUrl,
@@ -378,6 +422,8 @@ export async function getProjectById(id: string): Promise<DBProject | null> {
           tracks: p.tracks.map((t) => ({
             id: t.id,
             projectId: t.projectId,
+            creatorName: t.creatorName || "Anonyme",
+            creatorId: t.creatorId || null,
             title: t.title,
             artist: t.artist,
             audioUrl: t.audioUrl,
@@ -403,8 +449,18 @@ export async function getProjectById(id: string): Promise<DBProject | null> {
   if (!proj) return null;
   const tracks = db.tracks
     .filter((t) => t.projectId === proj.id)
-    .sort((a, b) => a.orderIndex - b.orderIndex);
-  return { ...proj, tracks };
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((t) => ({
+      ...t,
+      creatorName: t.creatorName || "Anonyme",
+      creatorId: t.creatorId || null,
+    }));
+  return {
+    ...proj,
+    creatorName: proj.creatorName || "Anonyme",
+    creatorId: proj.creatorId || null,
+    tracks,
+  };
 }
 
 export async function createProject(data: {
@@ -414,8 +470,12 @@ export async function createProject(data: {
   accentColor?: string;
   slug?: string;
   isDownloadable?: boolean;
+  creatorName?: string;
+  creatorId?: string;
 }): Promise<DBProject> {
-  const user = await getOwnerUser();
+  const creatorName = data.creatorName || "Anonyme";
+  const creatorId = data.creatorId || null;
+
   const baseSlug =
     data.slug ||
     data.title
@@ -430,18 +490,21 @@ export async function createProject(data: {
     try {
       const p = await prisma.project.create({
         data: {
-          ownerId: user.id,
           title: data.title,
           description: data.description || null,
           coverImageUrl: data.coverImageUrl || null,
           accentColor: data.accentColor || "#00ffd5",
           slug: uniqueSlug,
           isDownloadable: data.isDownloadable ?? true,
+          creatorName,
+          creatorId,
         },
       });
       return {
         id: p.id,
         ownerId: p.ownerId,
+        creatorName: p.creatorName,
+        creatorId: p.creatorId,
         title: p.title,
         description: p.description,
         coverImageUrl: p.coverImageUrl,
@@ -460,7 +523,9 @@ export async function createProject(data: {
   const db = readFallbackDB();
   const newProj: DBProject = {
     id: `proj_${Date.now()}`,
-    ownerId: user.id,
+    ownerId: null,
+    creatorName,
+    creatorId,
     title: data.title,
     description: data.description || null,
     coverImageUrl: data.coverImageUrl || null,
@@ -503,6 +568,8 @@ export async function updateProject(
       return {
         id: p.id,
         ownerId: p.ownerId,
+        creatorName: p.creatorName || "Anonyme",
+        creatorId: p.creatorId || null,
         title: p.title,
         description: p.description,
         coverImageUrl: p.coverImageUrl,
@@ -559,6 +626,8 @@ export async function getTracks(projectId?: string | null): Promise<DBTrack[]> {
       return tracks.map((t) => ({
         id: t.id,
         projectId: t.projectId,
+        creatorName: t.creatorName || "Anonyme",
+        creatorId: t.creatorId || null,
         title: t.title,
         artist: t.artist,
         audioUrl: t.audioUrl,
@@ -582,7 +651,13 @@ export async function getTracks(projectId?: string | null): Promise<DBTrack[]> {
   if (projectId !== undefined) {
     tracks = tracks.filter((t) => t.projectId === projectId);
   }
-  return tracks.sort((a, b) => a.orderIndex - b.orderIndex);
+  return tracks
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((t) => ({
+      ...t,
+      creatorName: t.creatorName || "Anonyme",
+      creatorId: t.creatorId || null,
+    }));
 }
 
 export async function getTrackById(id: string): Promise<DBTrack | null> {
@@ -593,6 +668,8 @@ export async function getTrackById(id: string): Promise<DBTrack | null> {
         return {
           id: t.id,
           projectId: t.projectId,
+          creatorName: t.creatorName || "Anonyme",
+          creatorId: t.creatorId || null,
           title: t.title,
           artist: t.artist,
           audioUrl: t.audioUrl,
@@ -613,7 +690,13 @@ export async function getTrackById(id: string): Promise<DBTrack | null> {
   }
 
   const db = readFallbackDB();
-  return db.tracks.find((t) => t.id === id) || null;
+  const track = db.tracks.find((t) => t.id === id);
+  if (!track) return null;
+  return {
+    ...track,
+    creatorName: track.creatorName || "Anonyme",
+    creatorId: track.creatorId || null,
+  };
 }
 
 export async function createTrack(data: {
@@ -628,7 +711,12 @@ export async function createTrack(data: {
   bpm?: number;
   waveformData?: string;
   orderIndex?: number;
+  creatorName?: string;
+  creatorId?: string;
 }): Promise<DBTrack> {
+  const creatorName = data.creatorName || "Anonyme";
+  const creatorId = data.creatorId || null;
+
   // calculate order index if not given
   let orderIndex = data.orderIndex;
   if (orderIndex === undefined) {
@@ -651,11 +739,15 @@ export async function createTrack(data: {
           bpm: data.bpm || null,
           waveformData: data.waveformData || null,
           orderIndex,
+          creatorName,
+          creatorId,
         },
       });
       return {
         id: t.id,
         projectId: t.projectId,
+        creatorName: t.creatorName,
+        creatorId: t.creatorId,
         title: t.title,
         artist: t.artist,
         audioUrl: t.audioUrl,
@@ -678,6 +770,8 @@ export async function createTrack(data: {
   const newTrack: DBTrack = {
     id: `track_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     projectId: data.projectId || null,
+    creatorName,
+    creatorId,
     title: data.title,
     artist: data.artist || null,
     audioUrl: data.audioUrl,
@@ -721,6 +815,8 @@ export async function updateTrack(
       return {
         id: t.id,
         projectId: t.projectId,
+        creatorName: t.creatorName || "Anonyme",
+        creatorId: t.creatorId || null,
         title: t.title,
         artist: t.artist,
         audioUrl: t.audioUrl,
@@ -786,6 +882,8 @@ export async function deleteTrack(id: string): Promise<DBTrack | null> {
       return {
         id: t.id,
         projectId: t.projectId,
+        creatorName: t.creatorName || "Anonyme",
+        creatorId: t.creatorId || null,
         title: t.title,
         artist: t.artist,
         audioUrl: t.audioUrl,
@@ -912,6 +1010,8 @@ export async function getShareLinkByToken(
             ? {
                 id: s.project.id,
                 ownerId: s.project.ownerId,
+                creatorName: s.project.creatorName || "Anonyme",
+                creatorId: s.project.creatorId || null,
                 title: s.project.title,
                 description: s.project.description,
                 coverImageUrl: s.project.coverImageUrl,
@@ -923,6 +1023,8 @@ export async function getShareLinkByToken(
                 tracks: s.project.tracks.map((t) => ({
                   id: t.id,
                   projectId: t.projectId,
+                  creatorName: t.creatorName || "Anonyme",
+                  creatorId: t.creatorId || null,
                   title: t.title,
                   artist: t.artist,
                   audioUrl: t.audioUrl,
@@ -942,6 +1044,8 @@ export async function getShareLinkByToken(
             ? {
                 id: s.track.id,
                 projectId: s.track.projectId,
+                creatorName: s.track.creatorName || "Anonyme",
+                creatorId: s.track.creatorId || null,
                 title: s.track.title,
                 artist: s.track.artist,
                 audioUrl: s.track.audioUrl,

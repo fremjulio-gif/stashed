@@ -4,10 +4,11 @@ import React from "react";
 import Link from "next/link";
 import { DBProject } from "@/lib/db";
 import { GlassCard } from "../ui/GlassCard";
-import { Folder, Music2, Share2, MoreVertical, Edit2, Trash2 } from "lucide-react";
+import { Folder, Music2, Share2, Edit2, Trash2, User } from "lucide-react";
 
 interface ProjectCardProps {
   project: DBProject;
+  canEdit?: boolean;
   onEdit: (project: DBProject) => void;
   onDelete: (project: DBProject) => void;
   onShare: (project: DBProject) => void;
@@ -15,6 +16,7 @@ interface ProjectCardProps {
 
 export function ProjectCard({
   project,
+  canEdit = false,
   onEdit,
   onDelete,
   onShare,
@@ -68,10 +70,22 @@ export function ProjectCard({
 
         {/* Info */}
         <Link href={`/dashboard/project/${project.id}`} className="block">
-          <h3 className="truncate text-base font-semibold text-white tracking-tight group-hover:text-white">
-            {project.title}
-          </h3>
-          <p className="mt-1 line-clamp-2 text-xs text-neutral-400 font-normal">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="truncate text-base font-semibold text-white tracking-tight group-hover:text-white">
+              {project.title}
+            </h3>
+          </div>
+
+          {/* Creator Attribution Badge */}
+          <div className="flex items-center gap-1.5 text-[11px] font-technical text-neutral-400 mb-2">
+            <User className="h-3 w-3 text-neutral-500" />
+            <span className="text-neutral-500">Créé par</span>
+            <span className="text-white font-medium bg-white/[0.06] px-1.5 py-0.5 rounded border border-white/[0.08]">
+              {project.creatorName || "Anonyme"}
+            </span>
+          </div>
+
+          <p className="line-clamp-2 text-xs text-neutral-400 font-normal">
             {project.description || "Aucune note de session."}
           </p>
         </Link>
@@ -100,27 +114,31 @@ export function ProjectCard({
             <Share2 className="h-3.5 w-3.5" />
           </button>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(project);
-            }}
-            title="Modifier le projet"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
-          >
-            <Edit2 className="h-3.5 w-3.5" />
-          </button>
+          {canEdit && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(project);
+                }}
+                title="Modifier le projet"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(project);
-            }}
-            title="Supprimer le projet"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-400/70 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(project);
+                }}
+                title="Supprimer le projet"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-400/70 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </GlassCard>

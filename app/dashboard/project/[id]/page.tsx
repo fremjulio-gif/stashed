@@ -19,9 +19,9 @@ import {
   Trash2,
   Music,
   Clock,
-  Sparkles,
   Download,
   Folder,
+  User,
 } from "lucide-react";
 
 export default function ProjectDetailPage() {
@@ -31,6 +31,7 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<DBProject | null>(null);
   const [tracks, setTracks] = useState<DBTrack[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ pseudo: string; visitorId: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Modals
@@ -39,6 +40,27 @@ export default function ProjectDetailPage() {
   const [sharingTrack, setSharingTrack] = useState<DBTrack | null>(null);
   const [isMetadataModalOpen, setIsMetadataModalOpen] = useState(false);
   const [editingTrack, setEditingTrack] = useState<DBTrack | null>(null);
+
+  // Load session
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("stashed_user");
+      if (stored) {
+        setCurrentUser(JSON.parse(stored));
+      }
+    } catch {
+      // Ignored
+    }
+
+    fetch("/api/auth/session")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data?.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchProjectData = async () => {
     if (!id) return;
@@ -63,8 +85,28 @@ export default function ProjectDetailPage() {
     fetchProjectData();
   }, [id]);
 
+  const canEditResource = (creatorId?: string | null, creatorName?: string | null) => {
+    if (!currentUser) return false;
+    if (creatorId && currentUser.visitorId && creatorId === currentUser.visitorId) return true;
+    if (
+      creatorName &&
+      currentUser.pseudo &&
+      creatorName.trim().toLowerCase() === currentUser.pseudo.trim().toLowerCase()
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const isProjectOwner = project ? canEditResource(project.creatorId, project.creatorName) : false;
+
   const handleDeleteProject = async () => {
     if (!project) return;
+    if (!isProjectOwner) {
+      alert("Vous ne pouvez supprimer que les projets que vous avez créés.");
+      return;
+    }
+
     if (
       !confirm(
         `Supprimer définitivement le projet "${project.title}" et toutes ses pistes audio ?`
@@ -79,6 +121,9 @@ export default function ProjectDetailPage() {
       });
       if (res.ok) {
         router.push("/dashboard");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Erreur lors de la suppression");
       }
     } catch (e) {
       console.error(e);
@@ -86,6 +131,12 @@ export default function ProjectDetailPage() {
   };
 
   const handleDeleteTrack = async (track: DBTrack) => {
+    const canDeleteThisTrack = canEditResource(track.creatorId, track.creatorName) || isProjectOwner;
+    if (!canDeleteThisTrack) {
+      alert("Vous ne pouvez supprimer que les pistes que vous avez ajoutées ou celles de votre projet.");
+      return;
+    }
+
     if (!confirm(`Supprimer la piste "${track.title}" ?`)) return;
     try {
       const res = await fetch(`/api/tracks/${track.id}`, {
@@ -93,6 +144,9 @@ export default function ProjectDetailPage() {
       });
       if (res.ok) {
         fetchProjectData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Erreur lors de la suppression");
       }
     } catch (e) {
       console.error(e);
@@ -102,7 +156,7 @@ export default function ProjectDetailPage() {
   if (loading || !project) {
     return (
       <div className="min-h-screen bg-daw-grid flex items-center justify-center font-technical text-neutral-400">
-        Chargement du projet DAW...
+        Chargement de la session collaborative...
       </div>
     );
   }
@@ -116,7 +170,10 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="min-h-screen bg-daw-grid pb-32">
-      <DashboardHeader onNewProject={() => router.push("/dashboard")} />
+      <DashboardHeader
+        userPseudo={currentUser?.pseudo}
+        onNewProject={() => router.push("/dashboard")}
+      />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         {/* Navigation Breadcrumb */}
@@ -126,7 +183,7 @@ export default function ProjectDetailPage() {
             className="flex items-center gap-1.5 text-xs font-semibold text-neutral-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Retour à la bibliothèque
+            Retour à la bibliothèque commune
           </Link>
         </div>
 
@@ -163,7 +220,7 @@ export default function ProjectDetailPage() {
             {/* Project Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 font-technical text-xs text-neutral-400 mb-1.5">
-                <span className="uppercase tracking-wider">Projet Stashed</span>
+                <span className="uppercase tracking-wider">Session Collaborative</span>
                 <span>•</span>
                 <span
                   className="h-2 w-2 rounded-full"
@@ -172,7 +229,10 @@ export default function ProjectDetailPage() {
                     boxShadow: `0 0 8px ${project.accentColor}`,
                   }}
                 />
-                <span>Master 24-bit</span>
+                <span className="flex items-center gap-1 text-white font-medium">
+                  <User className="h-3 w-3 text-neutral-400" />
+                  Créé par {project.creatorName || "Anonyme"}
+                </span>
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -224,27 +284,31 @@ export default function ProjectDetailPage() {
                   <Share2 className="h-4 w-4 mr-1.5" /> Partager ce projet
                 </GlassButton>
 
-                <GlassButton
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsEditModalOpen(true)}
-                >
-                  <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Modifier
-                </GlassButton>
+                {isProjectOwner && (
+                  <>
+                    <GlassButton
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsEditModalOpen(true)}
+                    >
+                      <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Modifier
+                    </GlassButton>
 
-                <GlassButton
-                  variant="danger"
-                  size="sm"
-                  onClick={handleDeleteProject}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Supprimer
-                </GlassButton>
+                    <GlassButton
+                      variant="danger"
+                      size="sm"
+                      onClick={handleDeleteProject}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Supprimer
+                    </GlassButton>
+                  </>
+                )}
               </div>
             </div>
           </div>
         </GlassCard>
 
-        {/* Audio Uploader for this project */}
+        {/* Audio Uploader for this project (any visitor can add stems/mixes) */}
         <div className="mb-8">
           <AudioUploader
             projectId={project.id}
@@ -257,19 +321,16 @@ export default function ProjectDetailPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between pb-1">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-400 font-technical">
-              Pistes du projet ({tracks.length})
+              Pistes de la session ({tracks.length})
             </h2>
-            <span className="text-[11px] font-technical text-neutral-500">
-              Cliquez sur une forme d&apos;onde pour naviguer
+            <span className="text-xs text-neutral-500 font-technical">
+              Glissez des fichiers pour ajouter à ce projet
             </span>
           </div>
 
           {tracks.length === 0 ? (
-            <div className="rounded-xl border border-white/10 bg-studio-900/30 p-8 text-center backdrop-blur-xl">
-              <Music className="mx-auto h-8 w-8 text-neutral-600 mb-2" />
-              <p className="text-xs text-neutral-400 font-technical">
-                Aucune piste audio dans ce projet. Déposez vos fichiers .wav ou .mp3 ci-dessus.
-              </p>
+            <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-xs text-neutral-400 font-technical">
+              Aucune piste audio dans ce projet. Déposez des fichiers .wav ou .mp3 ci-dessus.
             </div>
           ) : (
             <div className="space-y-2">
@@ -280,7 +341,7 @@ export default function ProjectDetailPage() {
                   index={i}
                   playlist={tracks}
                   accentColor={project.accentColor}
-                  isOwner={true}
+                  canEdit={canEditResource(track.creatorId, track.creatorName) || isProjectOwner}
                   allowDownload={project.isDownloadable}
                   onEdit={(t) => {
                     setEditingTrack(t);
@@ -309,7 +370,7 @@ export default function ProjectDetailPage() {
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        project={sharingTrack ? null : project}
+        project={project}
         track={sharingTrack}
       />
 

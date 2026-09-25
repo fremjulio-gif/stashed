@@ -20,6 +20,7 @@ interface WaveformTrackItemProps {
   playlist?: DBTrack[];
   accentColor?: string;
   isOwner?: boolean;
+  canEdit?: boolean;
   allowDownload?: boolean;
   onEdit?: (track: DBTrack) => void;
   onDelete?: (track: DBTrack) => void;
@@ -33,11 +34,13 @@ export function WaveformTrackItem({
   playlist = [],
   accentColor = "#00ffd5",
   isOwner = false,
+  canEdit = false,
   allowDownload = true,
   onEdit,
   onDelete,
   onShare,
 }: WaveformTrackItemProps) {
+  const canModify = isOwner || canEdit;
   const { currentTrack, isPlaying, currentTime, duration, playTrack, seekTo } =
     usePlayerStore();
 
@@ -90,8 +93,8 @@ export function WaveformTrackItem({
         {/* Top Row: Index, Play button, Title, Metadata tags, Actions */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            {/* Owner Drag Handle */}
-            {isOwner && (
+            {/* Drag Handle if allowed to edit */}
+            {canModify && (
               <div
                 className="cursor-grab text-neutral-600 hover:text-neutral-300 active:cursor-grabbing p-1 -ml-1"
                 title="Glisser pour réorganiser"
@@ -117,7 +120,7 @@ export function WaveformTrackItem({
               )}
             </button>
 
-            {/* Title & Artist */}
+            {/* Title & Creator */}
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-technical text-xs text-neutral-500 font-semibold">
@@ -136,7 +139,9 @@ export function WaveformTrackItem({
                 </h4>
               </div>
               <p className="text-[11px] text-neutral-400 font-technical truncate">
-                {track.artist || "jlowav"}
+                {track.creatorName
+                  ? `Ajouté par ${track.creatorName}`
+                  : track.artist || "Session audio"}
               </p>
             </div>
           </div>
@@ -176,7 +181,7 @@ export function WaveformTrackItem({
                 </a>
               )}
 
-              {isOwner && onShare && (
+              {onShare && (
                 <button
                   onClick={() => onShare(track)}
                   title="Partager cette piste"
@@ -186,7 +191,7 @@ export function WaveformTrackItem({
                 </button>
               )}
 
-              {isOwner && onEdit && (
+              {canModify && onEdit && (
                 <button
                   onClick={() => onEdit(track)}
                   title="Modifier les métadonnées"
@@ -196,7 +201,7 @@ export function WaveformTrackItem({
                 </button>
               )}
 
-              {isOwner && onDelete && (
+              {canModify && onDelete && (
                 <button
                   onClick={() => onDelete(track)}
                   title="Supprimer la piste"
@@ -214,9 +219,11 @@ export function WaveformTrackItem({
           <WaveformCanvas
             waveformData={track.waveformData}
             progress={progress}
+            duration={currentDuration}
+            isPlaying={trackIsPlaying}
             onSeek={handleSeek}
             accentColor={accentColor}
-            height={38}
+            height={42}
           />
         </div>
       </div>

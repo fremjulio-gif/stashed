@@ -4,11 +4,6 @@ import { getTracks, createTrack } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
-
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get("projectId");
 
@@ -26,8 +21,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!session || !session.pseudo) {
+      return NextResponse.json(
+        { error: "Veuillez choisir un pseudo pour ajouter une piste." },
+        { status: 401 }
+      );
     }
 
     const body = await req.json();
@@ -54,7 +52,7 @@ export async function POST(req: NextRequest) {
     const track = await createTrack({
       projectId: projectId || null,
       title,
-      artist: artist || "jlowav",
+      artist: artist || session.pseudo,
       audioUrl,
       storageKey: storageKey || null,
       format,
@@ -62,6 +60,8 @@ export async function POST(req: NextRequest) {
       sizeBytes: sizeBytes || 0,
       bpm: bpm || null,
       waveformData: waveformData || null,
+      creatorName: session.pseudo,
+      creatorId: session.visitorId,
     });
 
     return NextResponse.json(track, { status: 201 });

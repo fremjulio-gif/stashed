@@ -10,10 +10,10 @@ export async function GET() {
   return NextResponse.json({
     authenticated: true,
     user: {
-      id: session.userId,
-      email: session.email,
-      name: session.name,
-      role: session.role,
+      id: session.visitorId,
+      name: session.pseudo,
+      pseudo: session.pseudo,
+      visitorId: session.visitorId,
     },
   });
 }

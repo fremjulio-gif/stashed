@@ -14,6 +14,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { VUMeter } from "./VUMeter";
+import { WaveformCanvas } from "./WaveformCanvas";
 
 export function GlobalAudioPlayer() {
   const {
@@ -206,9 +207,10 @@ export function GlobalAudioPlayer() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const targetTime = parseFloat(e.target.value);
+  const handleSeekProgress = (prog: number) => {
+    const targetTime = prog * (duration || currentTrack?.duration || 0);
     setCurrentTime(targetTime);
+    seekTo(targetTime);
     if (audioRef.current) {
       audioRef.current.currentTime = targetTime;
     }
@@ -239,20 +241,18 @@ export function GlobalAudioPlayer() {
       <div className="fixed bottom-0 left-0 right-0 z-40 p-2 sm:p-4 select-none pointer-events-none">
         <div className="mx-auto max-w-7xl pointer-events-auto">
           <div className="glass-panel liquid-border rounded-2xl border border-white/[0.12] bg-studio-950/85 p-3 sm:px-6 sm:py-3.5 shadow-2xl backdrop-blur-2xl">
-            {/* Top Scrubber Slider */}
-            <div className="relative -mt-1.5 mb-2.5 flex items-center group">
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={currentTime}
-                onChange={handleSeek}
-                aria-label="Position audio"
-                className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-white hover:h-2 transition-all"
-                style={{
-                  accentColor: accentColor,
-                }}
+            {/* Top Compact Waveform Scrubber */}
+            <div className="relative -mt-1.5 mb-2 w-full">
+              <WaveformCanvas
+                waveformData={currentTrack.waveformData}
+                progress={duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0}
+                duration={duration || currentTrack.duration}
+                isPlaying={isPlaying}
+                onSeek={handleSeekProgress}
+                accentColor={accentColor}
+                height={26}
+                compact={true}
+                interactive={true}
               />
             </div>
 
@@ -281,7 +281,11 @@ export function GlobalAudioPlayer() {
                     {currentTrack.title}
                   </h4>
                   <div className="flex items-center gap-1.5 text-[10px] text-neutral-400 font-technical">
-                    <span className="truncate">{currentTrack.artist || "jlowav"}</span>
+                    <span className="truncate">
+                      {currentTrack.creatorName
+                        ? `Par ${currentTrack.creatorName}`
+                        : currentTrack.artist || "Studio"}
+                    </span>
                     <span>•</span>
                     <span className="uppercase text-neutral-300 font-mono px-1 py-0.2 rounded bg-white/[0.08] text-[9px]">
                       {currentTrack.format.toUpperCase()}

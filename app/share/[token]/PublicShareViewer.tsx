@@ -142,7 +142,7 @@ export default function PublicShareViewer({ token }: PublicShareViewerProps) {
             Session Audio Protégée
           </h2>
           <p className="text-xs text-neutral-400 mb-6">
-            Cette bibliothèque a été partagée de manière privée par jlowav. Veuillez entrer le mot de passe pour accéder aux pistes.
+            Cette bibliothèque a été partagée de manière privée. Veuillez entrer le mot de passe pour accéder aux pistes.
           </p>
 
           <form onSubmit={handleVerifyPassword} className="space-y-4">
@@ -263,9 +263,11 @@ export default function PublicShareViewer({ token }: PublicShareViewerProps) {
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-center sm:justify-start gap-2 font-technical text-xs text-neutral-400 mb-1.5">
-                <span className="uppercase tracking-wider">Mastering Studio</span>
+                <span className="uppercase tracking-wider">Session Audio</span>
                 <span>•</span>
-                <span className="text-white font-medium">Curated by jlowav</span>
+                <span className="text-white font-medium">
+                  Créé par {project?.creatorName || singleTrack?.creatorName || "Artiste"}
+                </span>
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">

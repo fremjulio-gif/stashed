@@ -232,13 +232,24 @@ export function AudioUploader({
         // Step 3: Create Track in DB
         const trackTitle = item.name.replace(/\.[^/.]+$/, "");
 
+        // Try reading stored user pseudo
+        let creatorPseudo = undefined;
+        try {
+          const stored = localStorage.getItem("stashed_user");
+          if (stored) {
+            creatorPseudo = JSON.parse(stored)?.pseudo;
+          }
+        } catch {
+          // Ignored
+        }
+
         const trackRes = await fetch("/api/tracks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId: projectId || null,
             title: trackTitle,
-            artist: "jlowav",
+            artist: creatorPseudo || "Producteur",
             audioUrl: uploadedUrl,
             storageKey,
             format: ext,

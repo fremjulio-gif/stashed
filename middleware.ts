@@ -1,26 +1,41 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export const COOKIE_NAME = "stashed_session";
+const VISITOR_COOKIE_NAME = "stashed_user";
 
 export async function middleware(request: NextRequest) {
   try {
     const { pathname } = request.nextUrl;
-    const token = request.cookies.get(COOKIE_NAME)?.value;
+    const userCookie = request.cookies.get(VISITOR_COOKIE_NAME)?.value;
 
-    // Protect dashboard routes
-    if (pathname.startsWith("/dashboard")) {
-      if (!token) {
-        const loginUrl = new URL("/login", request.url);
-        loginUrl.searchParams.set("from", pathname);
-        return NextResponse.redirect(loginUrl);
-      }
+    // If accessing old /login route -> redirect directly to collaborative home
+    if (pathname === "/login") {
+      return NextResponse.redirect(new URL("/", request.url));
     }
 
-    // If already logged in, redirect /login to /dashboard
-    if (pathname === "/login") {
-      if (token) {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
+    // Protect dashboard routes: require a pseudo
+    if (pathname.startsWith("/dashboard")) {
+      let hasValidPseudo = false;
+      if (userCookie) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(userCookie));
+          if (
+            parsed &&
+            typeof parsed.pseudo === "string" &&
+            parsed.pseudo.trim().length > 0
+          ) {
+            hasValidPseudo = true;
+          }
+        } catch {
+          if (userCookie.trim().length > 0) {
+            hasValidPseudo = true;
+          }
+        }
+      }
+
+      if (!hasValidPseudo) {
+        const homeUrl = new URL("/", request.url);
+        return NextResponse.redirect(homeUrl);
       }
     }
 
@@ -32,9 +47,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/dashboard/:path*",
-    "/dashboard",
-    "/login",
-  ],
+  matcher: ["/dashboard/:path*", "/dashboard", "/login"],
 };
