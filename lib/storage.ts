@@ -88,18 +88,30 @@ export async function uploadFileBuffer(
     };
   }
 
-  // 2. Vercel Blob
+  // 2. Vercel Blob (requires a Public store for audio streaming)
   if (provider === "vercel-blob") {
-    const blob = await put(key, buffer, {
-      access: "public",
-      contentType,
-    });
-    return {
-      url: blob.url,
-      key: blob.pathname,
-      provider: "vercel-blob",
-      size: buffer.length,
-    };
+    try {
+      const blob = await put(key, buffer, {
+        access: "public",
+        contentType,
+      });
+      return {
+        url: blob.url,
+        key: blob.pathname,
+        provider: "vercel-blob",
+        size: buffer.length,
+      };
+    } catch (blobErr) {
+      if (
+        blobErr instanceof Error &&
+        blobErr.message.toLowerCase().includes("private store")
+      ) {
+        throw new Error(
+          "Votre Vercel Blob Store est configuré en mode 'Private'. Pour permettre la lecture audio et l'affichage des pochettes, créez un Blob Store en mode 'Public' dans votre dashboard Vercel (Storage > Create Database > Blob > Public)."
+        );
+      }
+      throw blobErr;
+    }
   }
 
   // 3. Local fallback (for local development without cloud keys)

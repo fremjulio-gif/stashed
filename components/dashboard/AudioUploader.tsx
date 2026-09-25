@@ -179,12 +179,24 @@ export function AudioUploader({
         // Case B: Vercel Blob direct browser upload
         else if (uploadConfig.provider === "vercel-blob") {
           const { upload } = await import("@vercel/blob/client");
-          const newBlob = await upload(`audio/${item.file.name}`, item.file, {
-            access: "public",
-            handleUploadUrl: "/api/upload/blob",
-          });
-          uploadedUrl = newBlob.url;
-          storageKey = newBlob.pathname;
+          try {
+            const newBlob = await upload(`audio/${item.file.name}`, item.file, {
+              access: "public",
+              handleUploadUrl: "/api/upload/blob",
+            });
+            uploadedUrl = newBlob.url;
+            storageKey = newBlob.pathname;
+          } catch (blobErr) {
+            if (
+              blobErr instanceof Error &&
+              blobErr.message.toLowerCase().includes("private store")
+            ) {
+              throw new Error(
+                "Votre store Vercel Blob est en mode 'Private'. Pour l'écoute audio et les waveforms, créez un Blob Store en mode 'Public' dans Vercel (Storage > Create Database > Blob > Public)."
+              );
+            }
+            throw blobErr;
+          }
         }
         // Case C: Local filesystem fallback (local dev)
         else if (uploadConfig.provider === "local") {
