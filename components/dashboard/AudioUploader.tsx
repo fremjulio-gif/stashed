@@ -1,7 +1,15 @@
 "use client";
 
-import React, { useState, useRef } from "react";
-import { UploadCloud, Music, FileAudio, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  UploadCloud,
+  FileAudio,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  AlertTriangle,
+  ExternalLink,
+} from "lucide-react";
 import { GlassButton } from "../ui/GlassButton";
 
 interface AudioUploaderProps {
@@ -20,6 +28,12 @@ interface UploadingFile {
   errorMessage?: string;
 }
 
+interface StorageStatus {
+  isConfigured: boolean;
+  provider: string;
+  isProduction: boolean;
+}
+
 export function AudioUploader({
   projectId,
   accentColor = "#00ffd5",
@@ -27,7 +41,18 @@ export function AudioUploader({
 }: AudioUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [queue, setQueue] = useState<UploadingFile[]>([]);
+  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check storage configuration on mount
+  useEffect(() => {
+    fetch("/api/storage/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setStorageStatus(data);
+      })
+      .catch((err) => console.warn("Could not check storage status:", err));
+  }, []);
 
   // Extract waveform peaks using Web Audio API
   const extractWaveformPeaks = async (
@@ -111,32 +136,89 @@ export function AudioUploader({
           )
         );
 
-        // Step 2: Upload File
-        const formData = new FormData();
-        formData.append("file", item.file);
-        formData.append("type", "audio");
+        // Step 2: Obtain Direct Upload Endpoint / Token
+        const ext = item.name.split(".").pop()?.toLowerCase() || "wav";
+        const mime = item.file.type || (ext === "wav" ? "audio/wav" : "audio/mpeg");
 
-        const uploadRes = await fetch("/api/upload", {
+        const tokenRes = await fetch("/api/upload/token", {
           method: "POST",
-          body: formData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: item.file.name,
+            contentType: mime,
+            folder: "audio",
+          }),
         });
 
-        if (!uploadRes.ok) {
-          const errData = await uploadRes.json();
-          throw new Error(errData.error || "Échec de l'upload");
+        if (!tokenRes.ok) {
+          const errData = await tokenRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Impossible d'initialiser le téléversement.");
         }
 
-        const uploaded = await uploadRes.json();
+        const uploadConfig = await tokenRes.json();
+        if (uploadConfig.error) {
+          throw new Error(uploadConfig.error);
+        }
+
+        let uploadedUrl = "";
+        let storageKey = uploadConfig.key || `audio/${Date.now()}_${item.file.name}`;
+
+        // Case A: Cloudflare R2 direct browser-to-bucket S3 PUT
+        if (uploadConfig.provider === "r2") {
+          const r2Res = await fetch(uploadConfig.uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": mime },
+            body: item.file,
+          });
+
+          if (!r2Res.ok) {
+            throw new Error("Échec du téléversement direct vers Cloudflare R2.");
+          }
+          uploadedUrl = uploadConfig.finalPublicUrl;
+        }
+        // Case B: Vercel Blob direct browser upload
+        else if (uploadConfig.provider === "vercel-blob") {
+          const { upload } = await import("@vercel/blob/client");
+          const newBlob = await upload(`audio/${item.file.name}`, item.file, {
+            access: "public",
+            handleUploadUrl: "/api/upload/blob",
+          });
+          uploadedUrl = newBlob.url;
+          storageKey = newBlob.pathname;
+        }
+        // Case C: Local filesystem fallback (local dev)
+        else if (uploadConfig.provider === "local") {
+          const formData = new FormData();
+          formData.append("file", item.file);
+          formData.append("type", "audio");
+
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!uploadRes.ok) {
+            const errData = await uploadRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Échec de l'upload local");
+          }
+
+          const uploaded = await uploadRes.json();
+          uploadedUrl = uploaded.url;
+          storageKey = uploaded.key;
+        } else {
+          throw new Error(
+            "Stockage cloud non configuré : Activez Vercel Blob dans le dashboard Vercel (onglet Storage) ou renseignez vos clés Cloudflare R2."
+          );
+        }
 
         setQueue((prev) =>
           prev.map((q) =>
-            q.id === item.id ? { ...q, progress: 75 } : q
+            q.id === item.id ? { ...q, progress: 80 } : q
           )
         );
 
         // Step 3: Create Track in DB
         const trackTitle = item.name.replace(/\.[^/.]+$/, "");
-        const ext = item.name.split(".").pop()?.toLowerCase() || "wav";
 
         const trackRes = await fetch("/api/tracks", {
           method: "POST",
@@ -145,8 +227,8 @@ export function AudioUploader({
             projectId: projectId || null,
             title: trackTitle,
             artist: "jlowav",
-            audioUrl: uploaded.url,
-            storageKey: uploaded.key,
+            audioUrl: uploadedUrl,
+            storageKey,
             format: ext,
             duration: duration || 0,
             sizeBytes: item.size,
@@ -155,7 +237,8 @@ export function AudioUploader({
         });
 
         if (!trackRes.ok) {
-          throw new Error("Erreur enregistrement métadonnées piste");
+          const trackErr = await trackRes.json().catch(() => ({}));
+          throw new Error(trackErr.error || "Erreur enregistrement métadonnées piste");
         }
 
         setQueue((prev) =>
@@ -192,6 +275,37 @@ export function AudioUploader({
 
   return (
     <div className="space-y-4">
+      {/* Storage configuration warning banner if in production and not configured */}
+      {storageStatus && !storageStatus.isConfigured && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 backdrop-blur-xl text-amber-200 shadow-glass">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1.5 text-xs">
+              <h5 className="font-bold text-white text-sm">
+                Stockage Cloud requis pour les fichiers audio (.wav & .mp3)
+              </h5>
+              <p className="leading-relaxed text-neutral-300">
+                Sur Vercel, le système de fichiers serveur est temporaire et en lecture seule. Pour héberger vos pistes audio et vos pochettes, activez un espace de stockage :
+              </p>
+              <div className="pt-2 flex flex-wrap gap-2.5">
+                <a
+                  href="https://vercel.com/dashboard"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-cyan/20 border border-accent-cyan/40 text-accent-cyan font-technical font-semibold hover:bg-accent-cyan/30 transition-colors"
+                >
+                  Option 1 : Vercel Blob (1 clic gratuit) <ExternalLink className="h-3 w-3" />
+                </a>
+                <span className="text-neutral-400 self-center">ou</span>
+                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-neutral-300 font-technical">
+                  Option 2 : Cloudflare R2 (10 Go gratuits, 0$ egress)
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drop Zone */}
       <div
         onDragOver={(e) => {

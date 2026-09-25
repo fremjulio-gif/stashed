@@ -103,6 +103,13 @@ export async function uploadFileBuffer(
   }
 
   // 3. Local fallback (for local development without cloud keys)
+  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production");
+  if (isProd) {
+    throw new Error(
+      "Stockage cloud non configuré sur Vercel : Veuillez activer Vercel Blob dans votre projet Vercel (onglet Storage > Blob) ou configurer vos variables Cloudflare R2."
+    );
+  }
+
   const localUploadDir = path.join(process.cwd(), "public", "uploads", folder);
   if (!fs.existsSync(localUploadDir)) {
     fs.mkdirSync(localUploadDir, { recursive: true });
@@ -120,8 +127,24 @@ export async function uploadFileBuffer(
 }
 
 /**
- * Generate a pre-signed URL for direct browser-to-cloud upload.
- * Highly recommended for heavy 24-bit .wav files (up to 200MB+) to bypass serverless limits.
+ * Check storage configuration status
+ */
+export function getStorageInfo() {
+  const provider = getActiveStorageProvider();
+  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production");
+  const isConfigured =
+    provider === "r2" || provider === "vercel-blob" || (!isProd && provider === "local");
+
+  return {
+    isConfigured,
+    provider: isConfigured ? provider : "none",
+    isProduction: isProd,
+  };
+}
+
+/**
+ * Generate a pre-signed URL or direct endpoint for direct browser-to-cloud upload.
+ * Bypasses serverless function payload limits (4.5MB) for heavy .wav & .mp3 files up to 250MB+.
  */
 export async function getDirectUploadUrl(
   filename: string,
@@ -131,12 +154,14 @@ export async function getDirectUploadUrl(
   uploadUrl: string;
   finalPublicUrl: string;
   key: string;
-  provider: StorageProvider;
+  provider: StorageProvider | "none";
+  error?: string;
 }> {
   const provider = getActiveStorageProvider();
   const safeFilename = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
   const key = `${folder}/${safeFilename}`;
 
+  // 1. Cloudflare R2 direct S3 presigned PUT
   if (provider === "r2") {
     const client = getR2Client();
     const bucket = process.env.R2_BUCKET_NAME!;
@@ -159,12 +184,34 @@ export async function getDirectUploadUrl(
     };
   }
 
-  // For Vercel Blob and Local, uploads go through standard upload endpoint
+  // 2. Vercel Blob client direct upload
+  if (provider === "vercel-blob") {
+    return {
+      uploadUrl: "/api/upload/blob",
+      finalPublicUrl: "",
+      key,
+      provider: "vercel-blob",
+    };
+  }
+
+  // 3. Local fallback check
+  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production");
+  if (isProd) {
+    return {
+      uploadUrl: "",
+      finalPublicUrl: "",
+      key,
+      provider: "none",
+      error:
+        "Stockage cloud non configuré : Activez Vercel Blob dans le dashboard Vercel (onglet Storage > Blob) ou renseignez vos clés Cloudflare R2.",
+    };
+  }
+
   return {
     uploadUrl: "/api/upload",
     finalPublicUrl: "",
     key,
-    provider,
+    provider: "local",
   };
 }
 
