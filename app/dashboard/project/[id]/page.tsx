@@ -72,7 +72,11 @@ export default function ProjectDetailPage() {
       }
       const data: DBProject = await res.json();
       setProject(data);
-      setTracks(data.tracks || []);
+      const tracksWithCover = (data.tracks || []).map((t) => ({
+        ...t,
+        coverImageUrl: data.coverImageUrl,
+      }));
+      setTracks(tracksWithCover);
     } catch (e) {
       console.error(e);
       router.push("/dashboard");

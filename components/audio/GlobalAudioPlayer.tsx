@@ -2,6 +2,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { usePlayerStore } from "@/lib/player-store";
+import { VUMeter } from "./VUMeter";
+import { WaveformCanvas } from "./WaveformCanvas";
+import { VinylCover } from "./VinylCover";
+import { NowPlayingView } from "./NowPlayingView";
+import { QueueDrawer } from "./QueueDrawer";
 import {
   Play,
   Pause,
@@ -10,15 +15,15 @@ import {
   Repeat,
   Volume2,
   VolumeX,
-  Disc3,
-  Sliders,
+  ListMusic,
+  Maximize2,
 } from "lucide-react";
-import { VUMeter } from "./VUMeter";
-import { WaveformCanvas } from "./WaveformCanvas";
 
 export function GlobalAudioPlayer() {
   const {
     currentTrack,
+    currentCoverUrl,
+    queue,
     isPlaying,
     currentTime,
     duration,
@@ -40,6 +45,8 @@ export function GlobalAudioPlayer() {
     setCurrentTime,
     setDuration,
     setLevels,
+    openNowPlaying,
+    toggleQueue,
   } = usePlayerStore();
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -48,14 +55,13 @@ export function GlobalAudioPlayer() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const [isExpandedMobile, setIsExpandedMobile] = useState(false);
-
-  // Initialize Web Audio Context on first interaction
+  // Initialize Web Audio Context on first user interaction
   const initAudioContext = () => {
     if (audioContextRef.current || !audioRef.current) return;
     try {
       const AudioCtx =
-        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new AudioCtx();
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 64;
@@ -131,7 +137,6 @@ export function GlobalAudioPlayer() {
         const dataArray = new Uint8Array(bufferLength);
         analyserRef.current.getByteFrequencyData(dataArray);
 
-        // Calculate left & right RMS approximations
         let sumLeft = 0;
         let sumRight = 0;
         const half = Math.floor(bufferLength / 2);
@@ -240,9 +245,9 @@ export function GlobalAudioPlayer() {
       {/* Persistent Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-40 p-2 sm:p-4 select-none pointer-events-none">
         <div className="mx-auto max-w-7xl pointer-events-auto">
-          <div className="glass-panel liquid-border rounded-2xl border border-white/[0.12] bg-studio-950/85 p-3 sm:px-6 sm:py-3.5 shadow-2xl backdrop-blur-2xl">
+          <div className="glass-panel liquid-border rounded-2xl border border-white/[0.14] bg-studio-950/90 p-3 sm:px-6 sm:py-3.5 shadow-2xl backdrop-blur-3xl transition-all">
             {/* Top Compact Waveform Scrubber */}
-            <div className="relative -mt-1.5 mb-2 w-full">
+            <div className="relative -mt-1.5 mb-2.5 w-full">
               <WaveformCanvas
                 waveformData={currentTrack.waveformData}
                 progress={duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0}
@@ -257,34 +262,32 @@ export function GlobalAudioPlayer() {
             </div>
 
             <div className="flex items-center justify-between gap-3 sm:gap-6">
-              {/* Left: Track Info & Format Badge */}
-              <div className="flex items-center gap-3 min-w-0 max-w-[45%] sm:max-w-xs">
-                <div
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-neutral-300"
-                  style={{
-                    boxShadow: isPlaying ? `0 0 16px -2px ${accentColor}40` : "none",
-                  }}
-                >
-                  <Disc3
-                    className={`h-5 w-5 ${
-                      isPlaying ? "animate-spin text-white" : "text-neutral-500"
-                    }`}
-                    style={{
-                      animationDuration: "4s",
-                      color: isPlaying ? accentColor : undefined,
-                    }}
-                  />
-                </div>
+              {/* Left: Vinyl Cover & Track Info */}
+              <div className="flex items-center gap-3.5 min-w-0 max-w-[45%] sm:max-w-xs md:max-w-sm">
+                {/* Vinyl Record Artwork with continuous slow rotation */}
+                <VinylCover
+                  coverUrl={currentCoverUrl}
+                  title={currentTrack.title}
+                  isPlaying={isPlaying}
+                  accentColor={accentColor}
+                  size="sm"
+                  onClick={openNowPlaying}
+                />
 
-                <div className="min-w-0">
-                  <h4 className="truncate text-xs sm:text-sm font-semibold text-white tracking-tight">
+                {/* Track Info (clickable to open Now Playing) */}
+                <div
+                  onClick={openNowPlaying}
+                  className="min-w-0 cursor-pointer group/info"
+                  title="Agrandir le lecteur (Now Playing)"
+                >
+                  <h4 className="truncate text-xs sm:text-sm font-semibold text-white tracking-tight group-hover/info:text-accent-cyan transition-colors">
                     {currentTrack.title}
                   </h4>
                   <div className="flex items-center gap-1.5 text-[10px] text-neutral-400 font-technical">
                     <span className="truncate">
                       {currentTrack.creatorName
                         ? `Par ${currentTrack.creatorName}`
-                        : currentTrack.artist || "Studio"}
+                        : currentTrack.artist || "Session audio"}
                     </span>
                     <span>•</span>
                     <span className="uppercase text-neutral-300 font-mono px-1 py-0.2 rounded bg-white/[0.08] text-[9px]">
@@ -299,13 +302,13 @@ export function GlobalAudioPlayer() {
                 </div>
               </div>
 
-              {/* Center: DAW Transport Controls */}
+              {/* Center: Minimalist Transport Controls */}
               <div className="flex flex-col items-center">
                 <div className="flex items-center gap-2 sm:gap-4">
                   <button
                     onClick={playPrevious}
                     aria-label="Piste précédente"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.06] transition-colors active:scale-95"
                   >
                     <SkipBack className="h-4 w-4" />
                   </button>
@@ -316,7 +319,7 @@ export function GlobalAudioPlayer() {
                     className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full text-black shadow-lg transition-transform active:scale-95"
                     style={{
                       backgroundColor: accentColor,
-                      boxShadow: `0 0 20px -2px ${accentColor}70`,
+                      boxShadow: `0 0 22px -2px ${accentColor}75`,
                     }}
                   >
                     {isPlaying ? (
@@ -329,7 +332,7 @@ export function GlobalAudioPlayer() {
                   <button
                     onClick={playNext}
                     aria-label="Piste suivante"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.06] transition-colors active:scale-95"
                   >
                     <SkipForward className="h-4 w-4" />
                   </button>
@@ -340,7 +343,7 @@ export function GlobalAudioPlayer() {
                     title={loop ? "Boucle activée" : "Boucle désactivée"}
                     className={`hidden sm:flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
                       loop
-                        ? "text-white bg-white/[0.12]"
+                        ? "text-white bg-white/[0.15] border border-white/20"
                         : "text-neutral-500 hover:text-neutral-300"
                     }`}
                   >
@@ -349,8 +352,8 @@ export function GlobalAudioPlayer() {
                 </div>
               </div>
 
-              {/* Right: Technical Readout, VU-Meter & Volume */}
-              <div className="flex items-center gap-3 sm:gap-5">
+              {/* Right: Technical Readout, VU-Meter, Volume, Queue & Expand */}
+              <div className="flex items-center gap-2 sm:gap-4">
                 {/* Time Display */}
                 <div className="hidden lg:flex flex-col text-right font-technical text-[11px] leading-tight text-neutral-300">
                   <span className="font-semibold text-white">
@@ -362,12 +365,14 @@ export function GlobalAudioPlayer() {
                 </div>
 
                 {/* Studio VU Meter */}
-                <VUMeter
-                  leftLevel={leftLevel}
-                  rightLevel={rightLevel}
-                  isPlaying={isPlaying}
-                  accentColor={accentColor}
-                />
+                <div className="hidden sm:block">
+                  <VUMeter
+                    leftLevel={leftLevel}
+                    rightLevel={rightLevel}
+                    isPlaying={isPlaying}
+                    accentColor={accentColor}
+                  />
+                </div>
 
                 {/* Volume Slider & Mute */}
                 <div className="hidden md:flex items-center gap-2">
@@ -393,11 +398,45 @@ export function GlobalAudioPlayer() {
                     className="h-1 w-16 lg:w-20 bg-white/10 rounded-full appearance-none cursor-pointer accent-white"
                   />
                 </div>
+
+                {/* Queue Button with Badge */}
+                <button
+                  onClick={toggleQueue}
+                  aria-label="File d'attente"
+                  title="File d'attente"
+                  className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                >
+                  <ListMusic className="h-4 w-4" />
+                  {queue.length > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-black font-mono shadow-sm"
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      {queue.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Now Playing Expand Button */}
+                <button
+                  onClick={openNowPlaying}
+                  aria-label="Agrandir le lecteur"
+                  title="Agrandir (Vue Now Playing)"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Extended "Now Playing" Modal */}
+      <NowPlayingView />
+
+      {/* Playlist / Queue Drawer */}
+      <QueueDrawer />
     </>
   );
 }

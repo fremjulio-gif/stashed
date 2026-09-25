@@ -36,6 +36,7 @@ export interface DBTrack {
   creatorId: string | null;
   title: string;
   artist: string | null;
+  coverImageUrl?: string | null;
   audioUrl: string;
   storageKey: string | null;
   format: string; // "wav" | "mp3"

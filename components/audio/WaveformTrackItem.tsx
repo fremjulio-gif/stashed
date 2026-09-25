@@ -12,6 +12,8 @@ import {
   Edit2,
   Trash2,
   GripVertical,
+  ListPlus,
+  Check,
 } from "lucide-react";
 
 interface WaveformTrackItemProps {
@@ -41,8 +43,9 @@ export function WaveformTrackItem({
   onShare,
 }: WaveformTrackItemProps) {
   const canModify = isOwner || canEdit;
-  const { currentTrack, isPlaying, currentTime, duration, playTrack, seekTo } =
+  const { currentTrack, isPlaying, currentTime, duration, playTrack, seekTo, addToQueue } =
     usePlayerStore();
+  const [addedToQueue, setAddedToQueue] = React.useState(false);
 
   const isCurrent = currentTrack?.id === track.id;
   const trackIsPlaying = isCurrent && isPlaying;
@@ -67,7 +70,7 @@ export function WaveformTrackItem({
   };
 
   const handleToggle = () => {
-    playTrack(track, playlist, accentColor);
+    playTrack(track, playlist, accentColor, track.coverImageUrl);
   };
 
   const handleSeek = (ratio: number) => {
@@ -170,6 +173,28 @@ export function WaveformTrackItem({
 
             {/* Action buttons */}
             <div className="flex items-center gap-1 pl-1">
+              {/* Add to Queue Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addToQueue(track, track.coverImageUrl);
+                  setAddedToQueue(true);
+                  setTimeout(() => setAddedToQueue(false), 1800);
+                }}
+                title={addedToQueue ? "Ajouté à la file !" : "Ajouter à la file d'attente"}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                  addedToQueue
+                    ? "text-accent-cyan bg-accent-cyan/15 border border-accent-cyan/30"
+                    : "text-neutral-400 hover:text-white hover:bg-white/[0.08]"
+                }`}
+              >
+                {addedToQueue ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <ListPlus className="h-3.5 w-3.5" />
+                )}
+              </button>
+
               {allowDownload && (
                 <a
                   href={track.audioUrl}

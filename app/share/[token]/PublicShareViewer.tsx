@@ -175,7 +175,11 @@ export default function PublicShareViewer({ token }: PublicShareViewerProps) {
 
   const project = shareData.project;
   const singleTrack = shareData.track;
-  const tracks: DBTrack[] = project?.tracks || (singleTrack ? [singleTrack] : []);
+  const rawTracks: DBTrack[] = project?.tracks || (singleTrack ? [singleTrack] : []);
+  const tracks: DBTrack[] = rawTracks.map((t) => ({
+    ...t,
+    coverImageUrl: project?.coverImageUrl || singleTrack?.coverImageUrl || null,
+  }));
   const accentColor = project?.accentColor || "#00ffd5";
 
   const totalDuration = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);

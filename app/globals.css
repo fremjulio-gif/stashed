@@ -122,3 +122,38 @@ button, a, input, select, textarea {
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* Vinyl Record Slow Rotation (Continuous, smooth pause & resume on state) */
+@keyframes spin-vinyl {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-vinyl {
+  animation: spin-vinyl 18s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.animate-vinyl-running {
+  animation-play-state: running;
+}
+
+.animate-vinyl-paused {
+  animation-play-state: paused;
+}
+
+/* Concentric vinyl groove reflections */
+.vinyl-grooves {
+  background:
+    radial-gradient(circle, transparent 30%, rgba(255, 255, 255, 0.06) 31%, transparent 32%),
+    radial-gradient(circle, transparent 44%, rgba(255, 255, 255, 0.05) 45%, transparent 46%),
+    radial-gradient(circle, transparent 58%, rgba(255, 255, 255, 0.05) 59%, transparent 60%),
+    radial-gradient(circle, transparent 72%, rgba(255, 255, 255, 0.06) 73%, transparent 74%),
+    radial-gradient(circle, transparent 86%, rgba(255, 255, 255, 0.05) 87%, transparent 88%);
+}
+
