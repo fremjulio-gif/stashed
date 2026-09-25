@@ -175,7 +175,6 @@ stashed/
 
 ## 👤 Propriétaire
 
-- **Ingénieur du son** : `jlowav`
-- **Email** : `frem.julio@gmail.com`
+
 - **Application déployée** : [https://stashedd.vercel.app/](https://stashedd.vercel.app/)
 - **Repository GitHub** : [https://github.com/fremjulio-gif/stashed](https://github.com/fremjulio-gif/stashed)
